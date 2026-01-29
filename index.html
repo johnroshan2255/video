@@ -954,14 +954,8 @@
                 card.addEventListener('click', function() {
                     const mediaType = this.dataset.mediaType;
                     const mediaId = this.dataset.mediaId;
-                    // Navigate to movie detail page
-                    if (mediaType === 'movie') {
-                        window.location.href = `movie-detail.html?id=${mediaId}`;
-                    } else {
-                        // For TV shows, still use video player
-                        const title = this.dataset.title;
-                        openVideoPlayer(mediaType, mediaId, title);
-                    }
+                    // Navigate to detail page for both movies and TV shows
+                    window.location.href = `movie-detail.html?id=${mediaId}&type=${mediaType}`;
                 });
             });
         }
@@ -972,14 +966,8 @@
                 card.addEventListener('click', function() {
                     const mediaType = this.dataset.mediaType;
                     const mediaId = this.dataset.mediaId;
-                    // Navigate to movie detail page for movies
-                    if (mediaType === 'movie') {
-                        window.location.href = `movie-detail.html?id=${mediaId}`;
-                    } else {
-                        // For TV shows, use video player
-                        const title = this.dataset.title;
-                        openVideoPlayer(mediaType, mediaId, title);
-                    }
+                    // Navigate to detail page for both movies and TV shows
+                    window.location.href = `movie-detail.html?id=${mediaId}&type=${mediaType}`;
                 });
             });
         }

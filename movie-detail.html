@@ -444,6 +444,56 @@
             border: none;
         }
 
+        /* Season/Episode Selector */
+        .season-episode-selector {
+            margin-bottom: 2rem;
+            display: none;
+        }
+
+        .season-episode-selector.active {
+            display: block;
+        }
+
+        .selector-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .selector-label {
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            display: block;
+            font-size: 0.875rem;
+        }
+
+        .season-select,
+        .episode-select {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: var(--bg-primary);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: 'Outfit', sans-serif;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .season-select:focus,
+        .episode-select:focus {
+            outline: none;
+            border-color: var(--accent-red);
+        }
+
+        .season-select option,
+        .episode-select option {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .hero-section {
@@ -472,16 +522,20 @@
             .actors-section {
                 padding: 2rem 1rem;
             }
+
+            .selector-row {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <header>
         <div class="logo">
-            <a href="video.html">Video</a>
+            <a href="index.html">Video</a>
         </div>
         <nav class="nav">
-            <a href="video.html"><i class="fas fa-home"></i> Home</a>
+            <a href="index.html"><i class="fas fa-home"></i> Home</a>
         </nav>
     </header>
 
@@ -538,9 +592,13 @@
         currentMediaType = mediaType;
 
         if (!movieId) {
-            document.getElementById('heroContent').innerHTML = '<div class="loading">No movie ID provided. <a href="video.html" style="color: var(--accent-red);">Go back</a></div>';
+            document.getElementById('heroContent').innerHTML = '<div class="loading">No ID provided. <a href="index.html" style="color: var(--accent-red);">Go back</a></div>';
         } else {
-            loadMovieDetails(movieId);
+            if (currentMediaType === 'tv') {
+                loadTVDetails(movieId);
+            } else {
+                loadMovieDetails(movieId);
+            }
         }
 
         // AJAX helper function
@@ -601,7 +659,7 @@
                 currentMediaType = 'movie';
 
                 // Render hero content
-                renderHeroContent(movieData);
+                renderHeroContent(movieData, 'movie');
 
                 // Render actors
                 if (movieData.credits && movieData.credits.cast) {
@@ -613,34 +671,110 @@
             } catch (error) {
                 console.error('Error loading movie details:', error);
                 document.getElementById('heroContent').innerHTML = 
-                    '<div class="loading">Failed to load movie details. <a href="video.html" style="color: var(--accent-red);">Go back</a></div>';
+                    '<div class="loading">Failed to load movie details. <a href="index.html" style="color: var(--accent-red);">Go back</a></div>';
+            }
+        }
+
+        // Load TV show details
+        async function loadTVDetails(tvId) {
+            try {
+                // Call main API endpoint
+                const tvData = await ajaxRequest(
+                    `${API_BASE}/tv/${tvId}?append_to_response=credits,external_ids,videos,recommendations,translations,similar&language=en&include_video_language=en,null`
+                );
+
+                // Call images API
+                let imagesData = null;
+                try {
+                    imagesData = await ajaxRequest(`${API_BASE}/tv/${tvId}/images`);
+                } catch (error) {
+                    console.warn('Could not load images:', error);
+                }
+
+                // Set hero background image (prefer backdrop, fallback to poster)
+                const heroImage = document.getElementById('heroImage');
+                const heroImageBlur = document.getElementById('heroImageBlur');
+                if (tvData.backdrop_path) {
+                    const url = `https://image.tmdb.org/t/p/w780${tvData.backdrop_path}`;
+                    heroImage.src = url;
+                    heroImageBlur.src = url;
+                } else if (tvData.poster_path) {
+                    const url = IMAGE_BASE + tvData.poster_path;
+                    heroImage.src = url;
+                    heroImageBlur.src = url;
+                } else {
+                    heroImage.style.display = 'none';
+                    heroImageBlur.style.display = 'none';
+                }
+
+                // Store media info
+                currentMediaId = tvId;
+                currentMediaType = 'tv';
+
+                // Render hero content
+                renderHeroContent(tvData, 'tv');
+
+                // Render actors
+                if (tvData.credits && tvData.credits.cast) {
+                    renderActors(tvData.credits.cast);
+                } else {
+                    document.getElementById('actorsGrid').innerHTML = '<div class="loading">No actors information available</div>';
+                }
+
+            } catch (error) {
+                console.error('Error loading TV show details:', error);
+                document.getElementById('heroContent').innerHTML = 
+                    '<div class="loading">Failed to load TV show details. <a href="index.html" style="color: var(--accent-red);">Go back</a></div>';
             }
         }
 
         // Render hero content
-        function renderHeroContent(movie) {
+        function renderHeroContent(media, mediaType = 'movie') {
             const heroContent = document.getElementById('heroContent');
             
-            // Format runtime
-            const runtime = movie.runtime ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m` : 'N/A';
+            // Get title (movie.title or tv.name)
+            const title = media.title || media.name;
             
-            // Format release year
-            const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear() : 'N/A';
+            // Format runtime (for movies) or episode runtime (for TV)
+            let runtime = 'N/A';
+            if (mediaType === 'movie') {
+                runtime = media.runtime ? `${Math.floor(media.runtime / 60)}h ${media.runtime % 60}m` : 'N/A';
+            } else {
+                runtime = media.episode_run_time && media.episode_run_time.length > 0 
+                    ? `${media.episode_run_time[0]}m` 
+                    : 'N/A';
+            }
+            
+            // Format release year (movie.release_date or tv.first_air_date)
+            const releaseDate = media.release_date || media.first_air_date;
+            const releaseYear = releaseDate ? new Date(releaseDate).getFullYear() : 'N/A';
             
             // Format rating
-            const rating = movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A';
+            const rating = media.vote_average ? media.vote_average.toFixed(1) : 'N/A';
 
             // Parse title to extract number if it exists
-            let titleParts = movie.title.split(' ');
-            let title = titleParts.slice(0, -1).join(' ');
+            let titleParts = title.split(' ');
+            let titleText = titleParts.slice(0, -1).join(' ');
             let number = titleParts[titleParts.length - 1];
+            if (titleText === '') {
+                titleText = title;
+                number = '';
+            }
+
+            // Get number of seasons for TV shows
+            const seasonsInfo = mediaType === 'tv' && media.number_of_seasons 
+                ? `<div class="movie-metadata-item">
+                    <i class="fas fa-tv"></i>
+                    <span>${media.number_of_seasons} Season${media.number_of_seasons !== 1 ? 's' : ''}</span>
+                </div>` 
+                : '';
 
             heroContent.innerHTML = `
                 <div class="movie-logo">
-                    <span class="disney">Disney</span>
+                    <span class="disney">${mediaType === 'tv' ? 'TV Series' : 'Disney'}</span>
                     <div class="title">
-                        <span>${title.toUpperCase()}</span>
-                        ${!isNaN(number) ? `<span class="title-number">${number}</span>` : ''}
+                        <span>${titleText.toUpperCase()}</span>
+                        ${number && !isNaN(number) ? `<span class="title-number">${number}</span>` : ''}
                     </div>
                 </div>
                 <div class="movie-metadata">
@@ -656,31 +790,55 @@
                         <i class="fas fa-star"></i>
                         <span>${rating}</span>
                     </div>
+                    ${seasonsInfo}
                 </div>
                 <div class="genre-tags">
-                    ${movie.genres ? movie.genres.map(genre => 
+                    ${media.genres ? media.genres.map(genre => 
                         `<span class="genre-tag">${genre.name}</span>`
                     ).join('') : ''}
                 </div>
                 <div class="movie-overview">
-                    ${movie.overview || 'No overview available.'}
+                    ${media.overview || 'No overview available.'}
                 </div>
+                ${mediaType === 'tv' ? `
+                <div class="season-episode-selector" id="seasonEpisodeSelector">
+                    <div class="selector-row">
+                        <div style="flex: 1;">
+                            <label class="selector-label">Season</label>
+                            <select class="season-select" id="seasonSelect" onchange="updateEpisodes()">
+                                <option value="">Select Season</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1;">
+                            <label class="selector-label">Episode</label>
+                            <select class="episode-select" id="episodeSelect" onchange="updateSelectedEpisode()">
+                                <option value="">Select Episode</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
                 <div class="action-buttons">
-                    <button class="btn-play" onclick="playMovie(${movie.id}, '${currentMediaType}')">
+                    <button class="btn-play" onclick="playMedia(${media.id}, '${mediaType}')" id="playButton" ${mediaType === 'tv' ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
                         <i class="fas fa-play"></i>
                         <span>Play</span>
                     </button>
-                    <button class="btn-icon" onclick="addToWatchlist(${movie.id})" title="Add to Watchlist">
+                    <button class="btn-icon" onclick="addToWatchlist(${media.id})" title="Add to Watchlist">
                         <i class="fas fa-plus"></i>
                     </button>
-                    <button class="btn-icon" onclick="downloadMovie(${movie.id})" title="Download">
+                    <button class="btn-icon" onclick="downloadMovie(${media.id})" title="Download">
                         <i class="fas fa-download"></i>
                     </button>
-                    <button class="btn-similars" onclick="showSimilars(${movie.id})">
+                    <button class="btn-similars" onclick="showSimilars(${media.id})">
                         Similars
                     </button>
                 </div>
             `;
+
+            // Load seasons for TV shows
+            if (mediaType === 'tv' && media.seasons) {
+                loadSeasonsForTV(media.seasons, media.id);
+            }
         }
 
         // Render actors
@@ -711,23 +869,140 @@
             `).join('');
         }
 
+        // Store selected season and episode for TV shows
+        let selectedSeason = null;
+        let selectedEpisode = null;
+
+        // Load seasons for TV show
+        function loadSeasonsForTV(seasons, tvId) {
+            const seasonSelect = document.getElementById('seasonSelect');
+            const selector = document.getElementById('seasonEpisodeSelector');
+            
+            if (!seasonSelect || !selector) return;
+            
+            // Show the selector
+            selector.classList.add('active');
+            
+            // Filter out specials (season 0) and populate season selector
+            const regularSeasons = seasons.filter(season => season.season_number > 0);
+            seasonSelect.innerHTML = '<option value="">Select Season</option>' + 
+                regularSeasons.map(season => 
+                    `<option value="${season.season_number}">Season ${season.season_number}</option>`
+                ).join('');
+            
+            // Load episodes for first season if available
+            if (regularSeasons.length > 0) {
+                seasonSelect.value = regularSeasons[0].season_number;
+                updateEpisodes();
+            }
+        }
+
+        // Update episodes when season changes
+        async function updateEpisodes() {
+            const seasonSelect = document.getElementById('seasonSelect');
+            const episodeSelect = document.getElementById('episodeSelect');
+            
+            if (!seasonSelect || !episodeSelect) return;
+            
+            const seasonNumber = seasonSelect.value;
+            if (!seasonNumber) {
+                episodeSelect.innerHTML = '<option value="">Select Episode</option>';
+                selectedSeason = null;
+                selectedEpisode = null;
+                updatePlayButton();
+                return;
+            }
+            
+            selectedSeason = seasonNumber;
+            selectedEpisode = null;
+            updatePlayButton();
+            
+            episodeSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            try {
+                const data = await ajaxRequest(`${API_BASE}/tv/${currentMediaId}/season/${seasonNumber}?language=en`);
+                
+                // Populate episode selector
+                episodeSelect.innerHTML = '<option value="">Select Episode</option>' +
+                    data.episodes.map(episode => 
+                        `<option value="${episode.episode_number}">Episode ${episode.episode_number} - ${episode.name}</option>`
+                    ).join('');
+                
+                // Auto-select first episode if available
+                if (data.episodes && data.episodes.length > 0) {
+                    const firstEpisode = data.episodes[0].episode_number;
+                    episodeSelect.value = firstEpisode;
+                    selectedEpisode = firstEpisode.toString();
+                    updatePlayButton();
+                }
+            } catch (error) {
+                console.error('Error loading episodes:', error);
+                episodeSelect.innerHTML = '<option value="">Error loading episodes</option>';
+            }
+        }
+
+        // Update selected episode
+        function updateSelectedEpisode() {
+            const episodeSelect = document.getElementById('episodeSelect');
+            if (!episodeSelect) return;
+            
+            selectedEpisode = episodeSelect.value;
+            updatePlayButton();
+        }
+
+        // Update play button state
+        function updatePlayButton() {
+            const playButton = document.getElementById('playButton');
+            if (!playButton) return;
+            
+            if (currentMediaType === 'tv') {
+                if (selectedSeason && selectedEpisode) {
+                    playButton.disabled = false;
+                    playButton.style.opacity = '1';
+                    playButton.style.cursor = 'pointer';
+                } else {
+                    playButton.disabled = true;
+                    playButton.style.opacity = '0.5';
+                    playButton.style.cursor = 'not-allowed';
+                }
+            } else {
+                playButton.disabled = false;
+                playButton.style.opacity = '1';
+                playButton.style.cursor = 'pointer';
+            }
+        }
+
         // Action button handlers
-        function playMovie(movieId, mediaType = 'movie', season = null, episode = null) {
+        function playMedia(mediaId, mediaType = 'movie') {
+            if (mediaType === 'tv' && (!selectedSeason || !selectedEpisode)) {
+                alert('Please select a season and episode to play.');
+                return;
+            }
+            
             const playerOverlay = document.getElementById('playerOverlay');
             const playerIframe = document.getElementById('playerIframe');
             
             let embedUrl;
-            if (mediaType === 'tv' && season && episode) {
+            if (mediaType === 'tv' && selectedSeason && selectedEpisode) {
                 // TV series format: https://www.vidking.net/embed/tv/{tvId}/{season}/{episode}
-                embedUrl = `https://www.vidking.net/embed/tv/${movieId}/${season}/${episode}`;
+                embedUrl = `https://www.vidking.net/embed/tv/${mediaId}/${selectedSeason}/${selectedEpisode}`;
             } else {
                 // Movie format: https://www.vidking.net/embed/movie/{movieId}
-                embedUrl = `https://www.vidking.net/embed/movie/${movieId}`;
+                embedUrl = `https://www.vidking.net/embed/movie/${mediaId}`;
             }
             
             playerIframe.src = embedUrl;
             playerOverlay.classList.add('active');
             document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        }
+
+        // Legacy function name for backward compatibility
+        function playMovie(movieId, mediaType = 'movie', season = null, episode = null) {
+            if (mediaType === 'tv' && season && episode) {
+                selectedSeason = season;
+                selectedEpisode = episode;
+            }
+            playMedia(movieId, mediaType);
         }
 
         function closePlayer() {
